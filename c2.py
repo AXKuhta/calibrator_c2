@@ -111,7 +111,9 @@ class Calibrator:
 		self.tx(command)
 		response = ""
 
-		while not response.endswith("> "):
+		# Treat command prompt invitations as flow control
+		# Including \n should guard against false positives
+		while not response.endswith("\n> "):
 			response += self.rx()
 
 	def close(self):
