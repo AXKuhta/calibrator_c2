@@ -107,13 +107,12 @@ class Calibrator:
 		self.log.write(data)
 		return data
 
-	def wait(self, command):
+	def wait(self, command, flow_control="> "):
 		self.tx(command)
 		response = ""
 
 		# Treat command prompt invitations as flow control
-		# Including \n should guard against false positives
-		while not response.endswith("\n> "):
+		while not response.endswith(flow_control):
 			response += self.rx()
 
 	def close(self):
@@ -290,7 +289,8 @@ class PresetInterpreterDDCAndCalibratorV1:
 
 		print("NOW WAITING FOR DDC - Press start")
 
-		self.cal_link.wait("wait")
+		# Wait does not obey normal flow control
+		self.cal_link.wait("wait", flow_control="Running\n")
 
 		class Break(Exception):
 			pass
@@ -303,12 +303,12 @@ class PresetInterpreterDDCAndCalibratorV1:
 		# - Trigger count
 		#
 		# Some ways this could evolve:
-		# - [PRESENTLY] Active polling
+		# - [EARLIER] Active polling
 		#	- Running commands and waiting for responses
 		#	- Relies on existing CLI infra
 		#	- Not readily machine-readable
 		#	- Incurs some round trip latency
-		# - Inline event stream:
+		# - [PRESENTLY] Inline event stream:
 		#	- Running a special command that streams telemetry
 		#	- Too, relies on existing infra
 		#	- The stream could be machine readable
@@ -327,12 +327,10 @@ class PresetInterpreterDDCAndCalibratorV1:
 
 			async def calibrator_polls():
 				def poll():
-					self.cal_link.wait("isr")
-					self.cal_link.wait("perf")
+					self.cal_link.rx()
 
 				while True:
 					await asyncio.to_thread(poll)
-					await asyncio.sleep(1)
 
 			try:
 				await asyncio.gather(
@@ -349,7 +347,7 @@ class PresetInterpreterDDCAndCalibratorV1:
 		finally:
 			pass
 
-		self.cal_link.wait("seq stop")
+		# Link close will cause sequencer stop
 		self.cal_link.close()
 
 # Interpreter dispatch
