@@ -94,6 +94,8 @@ class Calibrator:
 		print("Calibrator: connected")
 
 		self.log = open(log_location, "w")
+		self.responses = []
+		self.acc = ""
 
 		self.rx()
 
@@ -103,9 +105,18 @@ class Calibrator:
 		self.sock.send(command.encode())
 
 	def rx(self):
-		data = self.sock.recv(16383).decode()
-		self.log.write(data)
-		return data
+		while not self.responses:
+			data = self.sock.recv(16383).decode()
+			self.log.write(data)
+
+			for c in data:
+				self.acc += c
+
+				if c == "\n" or self.acc.endswith("> "):
+					self.responses.append(self.acc)
+					self.acc = ""
+
+		return self.responses.pop(0)
 
 	def wait(self, command, flow_control="> "):
 		self.tx(command)
@@ -290,7 +301,10 @@ class PresetInterpreterDDCAndCalibratorV1:
 		print("NOW WAITING FOR DDC - Press start")
 
 		# Wait does not obey normal flow control
-		self.cal_link.wait("wait", flow_control="Running\n")
+		self.cal_link.tx("wait")
+
+		while self.cal_link.rx() != "Running\n":
+			pass
 
 		class Break(Exception):
 			pass
@@ -326,8 +340,22 @@ class PresetInterpreterDDCAndCalibratorV1:
 				raise Break()
 
 			async def calibrator_polls():
+				prev_ms = [None]
+
 				def poll():
-					self.cal_link.rx()
+					msg = self.cal_link.rx()
+
+					if msg == "Stop\n":
+						print("DDC stop detected - press enter")
+						raise Break()
+
+					time, event = msg.strip().split("\t")
+					time_ms = int(time) / 216 / 1000
+
+					delta = time_ms - (prev_ms[0] or 0.0)
+					prev_ms[0] = time_ms
+
+					print(f"+{delta:.1f}ms\t", event)
 
 				while True:
 					await asyncio.to_thread(poll)
