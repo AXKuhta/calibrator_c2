@@ -97,7 +97,8 @@ class Calibrator:
 		self.responses = []
 		self.acc = ""
 
-		self.rx()
+		while self.rx() != "> ":
+			pass
 
 	def tx(self, command):
 		command = command + "\n"
